@@ -12,30 +12,14 @@ p.payment_module.paylike span {
 }
 
 p.payment_module.paylike {
-    /*border: 1px solid #d6d4d4;
-    border-radius: 4px;
-    color: #333;
-    display: block;
-    font-size: 17px;
-    font-weight: bold;
-    letter-spacing: -1px;
-    line-height: 23px;
-    padding: 12px 1%;
-    position: relative;*/
-    /*background: #fbfbfb none repeat scroll 0 0;*/
     background: #fbfbfb url("../img/visa-master.svg") no-repeat scroll 15px 15px / 6% auto;
     cursor: pointer;
 }
 
 p.payment_module.paylike:hover{
-    /*background: #F6F6F6;*/
     background: #fbfbfb url("../img/visa-master.svg") no-repeat scroll 15px 15px / 6% auto;
     cursor: pointer;
 }
-
-/*p.payment_module a.cheque {
-    background: #fbfbfb url("../img/cheque.png") no-repeat scroll 15px 15px;
-}*/
 
 p.payment_module.paylike::after{
     color: #777;
@@ -52,6 +36,4 @@ p.payment_module.paylike::after{
 }
 
 p.payment_module.paylike .paylike_text{
-    /*padding: 33px 40px 34px 99px;*/
-    /*vertical-align: 120%;*/
 }

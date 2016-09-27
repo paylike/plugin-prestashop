@@ -62,8 +62,8 @@ class Paylike extends PaymentModule
 	{
 		return (parent::uninstall()
 			&& Db::getInstance()->Execute('DROP TABLE IF EXISTS `'._DB_PREFIX_.'paylike_transactions`')
-			&& Configuration::deleteByName('PAYLIKE_API_KEY')
-			&& Configuration::deleteByName('PAYLIKE_APP_KEY')
+			&& Configuration::deleteByName('PAYLIKE_PUBLIC_KEY')
+			&& Configuration::deleteByName('PAYLIKE_SECRET_KEY')
 			&& Configuration::deleteByName('PAYLIKE_CHECKOUT_MODE'));
 	}
 
@@ -71,15 +71,15 @@ class Paylike extends PaymentModule
 	{
 		if (Tools::isSubmit('submitPaylike'))
 		{
-			if (Tools::getvalue('PAYLIKE_API_KEY') && Tools::getvalue('PAYLIKE_APP_KEY'))
+			if (Tools::getvalue('PAYLIKE_PUBLIC_KEY') && Tools::getvalue('PAYLIKE_SECRET_KEY'))
 			{
-				Configuration::updateValue('PAYLIKE_API_KEY', Tools::getvalue('PAYLIKE_API_KEY'));
-				Configuration::updateValue('PAYLIKE_APP_KEY', Tools::getvalue('PAYLIKE_APP_KEY'));
+				Configuration::updateValue('PAYLIKE_PUBLIC_KEY', Tools::getvalue('PAYLIKE_PUBLIC_KEY'));
+				Configuration::updateValue('PAYLIKE_SECRET_KEY', Tools::getvalue('PAYLIKE_SECRET_KEY'));
 				Configuration::updateValue('PAYLIKE_CHECKOUT_MODE', Tools::getValue('PAYLIKE_CHECKOUT_MODE', 'instant'));
 				$this->context->controller->confirmations[] = $this->l('Settings saved successfully');
 			}
 			else
-				$this->context->controller->errors[] = $this->l('Public API key/ APP key cannot be empty.');
+				$this->context->controller->errors[] = $this->l('Public key and Secret key cannot be empty.');
 		}
 		$this->_html = $this->renderForm();
 		return $this->_html;
@@ -96,13 +96,13 @@ class Paylike extends PaymentModule
 				'input' => array(
 					array(
 						'type' => 'text',
-						'label' => $this->l('Public API Key'),
-						'name' => 'PAYLIKE_API_KEY'
+						'label' => $this->l('Public Key'),
+						'name' => 'PAYLIKE_PUBLIC_KEY'
 					),
 					array(
 						'type' => 'text',
-						'label' => $this->l('APP Key'),
-						'name' => 'PAYLIKE_APP_KEY'
+						'label' => $this->l('Secret Key'),
+						'name' => 'PAYLIKE_SECRET_KEY'
 					),
 					array(
 						'type' => 'radio',
@@ -153,8 +153,8 @@ class Paylike extends PaymentModule
 
 	public function getConfigFieldsValues()
 	{
-		return array('PAYLIKE_API_KEY' => Tools::getValue('PAYLIKE_API_KEY', Configuration::get('PAYLIKE_API_KEY')),
-			'PAYLIKE_APP_KEY' => Tools::getValue('PAYLIKE_APP_KEY', Configuration::get('PAYLIKE_APP_KEY')),
+		return array('PAYLIKE_PUBLIC_KEY' => Tools::getValue('PAYLIKE_PUBLIC_KEY', Configuration::get('PAYLIKE_PUBLIC_KEY')),
+			'PAYLIKE_SECRET_KEY' => Tools::getValue('PAYLIKE_SECRET_KEY', Configuration::get('PAYLIKE_SECRET_KEY')),
 			'PAYLIKE_CHECKOUT_MODE' => Tools::getValue('PAYLIKE_CHECKOUT_MODE', Configuration::get('PAYLIKE_CHECKOUT_MODE')));
 	}
 
@@ -173,8 +173,8 @@ class Paylike extends PaymentModule
 		/* If the "Refund" button has been clicked, check if we can perform a partial or full refund on this order */
 		if (Tools::isSubmit('SubmitPaylikeRefund') && Tools::getIsset('paylike_amount_to_refund'))
 		{
-			//$appKey = Configuration::get('PAYLIKE_APP_KEY');
-			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_APP_KEY'));
+			//$appKey = Configuration::get('PAYLIKE_SECRET_KEY');
+			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
 			$payliketransaction = Db::getInstance()->getRow('SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)Tools::getValue('id_order'));
 
 			if (isset($payliketransaction))
@@ -224,7 +224,7 @@ class Paylike extends PaymentModule
 		$total = Tools::convertPriceFull($total, $this->context->currency, $order_currency);
 		if ($order->module == $this->name && $order_state->shipped && Configuration::get('PAYLIKE_CHECKOUT_MODE') == 'delayed')
 		{
-			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_APP_KEY'));
+			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
 			$payliketransaction = Db::getInstance()->getRow('SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)$id_order);
 
 			if (isset($payliketransaction))
@@ -247,7 +247,7 @@ class Paylike extends PaymentModule
 	public function hookPayment($params)
 	{
 		//ensure paylike key is set
-		if (!Configuration::get('PAYLIKE_API_KEY') || !Configuration::get('PAYLIKE_APP_KEY'))
+		if (!Configuration::get('PAYLIKE_PUBLIC_KEY') || !Configuration::get('PAYLIKE_SECRET_KEY'))
 			return false;
 
 		$products = $params['cart']->getProducts();
@@ -281,13 +281,13 @@ class Paylike extends PaymentModule
 
 		$currency = new Currency((int)$params['cart']->id_currency);
 		$this->context->smarty->assign(array(
-			'PAYLIKE_APP_KEY'		=> Configuration::get('PAYLIKE_API_KEY'),
+			'PAYLIKE_SECRET_KEY'	=> Configuration::get('PAYLIKE_PUBLIC_KEY'),
 			'PS_SSL_ENABLED'		=> (Configuration::get('PS_SSL_ENABLED') ? 'https' : 'http'),
 			'id_cart'				=> Tools::jsonEncode($params['cart']->id),
 			'customer_data'			=> Tools::jsonEncode($customer_data),
 			'other_data'			=> Tools::jsonEncode($other_data),
 			'paylikeproductsarray'	=> Tools::jsonEncode($paylikeproductsarray),
-			'http_host'				=> Tools::getHttpHost(),//$_SERVER['HTTP_HOST'],
+			'http_host'				=> Tools::getHttpHost(),
 			'shop_name'				=> $this->context->shop->name,
 			'iso_code'				=> $currency->iso_code,
 			'amount'				=> $amount,

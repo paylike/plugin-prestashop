@@ -25,4 +25,3 @@ class PaylikeTransactions extends PaylikeSubsystem
 		return $this->request('POST', '/transactions/'.$id_transaction.'/refunds', $opts);
 	}
 }
-?>

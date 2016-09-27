@@ -35,4 +35,3 @@ class PaylikeSubsystem
 		return Tools::jsonDecode($raw);
 	}
 }
-?>

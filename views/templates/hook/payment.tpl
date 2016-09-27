@@ -5,9 +5,10 @@
 *  @copyright Team Paylike
 *  @license   MIT license: https://opensource.org/licenses/MIT
 *}
+
 <script>
-var PAYLIKE_APP_KEY 	= "{$PAYLIKE_APP_KEY|escape:'htmlall':'UTF-8'}";
-var paylike 			= Paylike(PAYLIKE_APP_KEY);
+var PAYLIKE_SECRET_KEY 	= "{$PAYLIKE_SECRET_KEY|escape:'htmlall':'UTF-8'}";
+var paylike 			= Paylike(PAYLIKE_SECRET_KEY);
 var id_cart 			= {$id_cart}; //html variable can not be escaped;
 var customer_data 		= {$customer_data}; //html variable can not be escaped;
 var other_data 			= {$other_data}; //html variable can not be escaped;
@@ -28,7 +29,6 @@ function pay()
 		description 	: description,
 		currency 		: iso_code,
 		amount 			: amount,
-		descriptor 		: "Payment to....",
 		custom 			: {
 			cartId		: id_cart,
 			customer 	: customer_data,
@@ -60,7 +60,6 @@ function htmlDecode(url)
 <div class="row">
 	<div class="col-xs-12">
 		<p class="payment_module paylike" onclick="pay();">
-			<!-- <input type="image" title="{l s='Validate order' mod='paylike'}" src="{$base_dir_ssl|escape:'htmlall':'UTF-8'}modules/paylike/views/img/visa-master.svg" width="64"> -->
 			<span class="paylike_text">{l s='Pay with credit card' mod='paylike'}</span>
 		</p>
 	</div>
