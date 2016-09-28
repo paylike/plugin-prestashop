@@ -281,7 +281,7 @@ class Paylike extends PaymentModule
 
 		$currency = new Currency((int)$params['cart']->id_currency);
 		$this->context->smarty->assign(array(
-			'PAYLIKE_SECRET_KEY'	=> Configuration::get('PAYLIKE_PUBLIC_KEY'),
+			'PAYLIKE_PUBLIC_KEY'	=> Configuration::get('PAYLIKE_PUBLIC_KEY'),
 			'PS_SSL_ENABLED'		=> (Configuration::get('PS_SSL_ENABLED') ? 'https' : 'http'),
 			'id_cart'				=> Tools::jsonEncode($params['cart']->id),
 			'customer_data'			=> Tools::jsonEncode($customer_data),

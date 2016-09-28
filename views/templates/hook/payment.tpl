@@ -7,8 +7,8 @@
 *}
 
 <script>
-var PAYLIKE_SECRET_KEY 	= "{$PAYLIKE_SECRET_KEY|escape:'htmlall':'UTF-8'}";
-var paylike 			= Paylike(PAYLIKE_SECRET_KEY);
+var PAYLIKE_PUBLIC_KEY 	= "{$PAYLIKE_PUBLIC_KEY|escape:'htmlall':'UTF-8'}";
+var paylike 			= Paylike(PAYLIKE_PUBLIC_KEY);
 var id_cart 			= {$id_cart}; //html variable can not be escaped;
 var customer_data 		= {$customer_data}; //html variable can not be escaped;
 var other_data 			= {$other_data}; //html variable can not be escaped;
