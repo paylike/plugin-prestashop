@@ -24,26 +24,20 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 		$customer = new Customer((int)$cart->id_customer);
 		$currency = new Currency((int)$cart->id_currency);
 		$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
+		$amount = Tools::ps_round($total, 2) * 100;
 
 		if (Configuration::get('PAYLIKE_CHECKOUT_MODE') == 'delayed')
-		{
-			$capture = $paylikeapi->transactions->fetch(Tools::getValue('transactionid'),
-			[
-			'currency' => $currency->iso_code,
-			'amount' => Tools::ps_round($total, 2) * 100,
-			]);
-
-		}
+			$capture = $paylikeapi->transactions->fetch(Tools::getValue('transactionid'));
 		else
 		{
 			$capture = $paylikeapi->transactions->capture(Tools::getValue('transactionid'),
 			[
 			'currency' => $currency->iso_code,
-			'amount' => Tools::ps_round($total, 2) * 100,
+			'amount' => $amount,
 			]);
 		}
 
-		if ($capture)
+		if ($capture->transaction->currency == $currency->iso_code && $capture->transaction->custom->cartId == $cart->id && $capture->transaction->amount == $amount)
 		{
 			$status = Configuration::get('PS_OS_PAYMENT');
 			if ($paylike->validateOrder((int)$cart->id, $status, $total, $paylike->displayName, null, array(), null, false, $customer->secure_key))
