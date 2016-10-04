@@ -297,9 +297,23 @@ class Paylike extends PaymentModule
 		return $this->display(__FILE__, 'views/templates/hook/payment.tpl');
 	}
 
-	public function hookPaymentReturn()
+	public function hookOrderConfirmation($params)
 	{
-		return $this->display(__FILE__, 'views/templates/hook/order-confirmation.tpl');
+		if (!$this->active)
+			return;
+
+		if (isset($params['objOrder']) && Validate::isLoadedObject($params['objOrder']) && isset($params['objOrder']->valid) && isset($params['objOrder']->reference))
+		{
+			$this->smarty->assign(
+				'paylike_order', array(
+					'id' => $params['objOrder']->id,
+					'reference' => $params['objOrder']->reference,
+					'valid' => $params['objOrder']->valid
+					)
+				);
+
+			return $this->display(__FILE__, 'views/templates/hook/order-confirmation.tpl');
+		}
 	}
 
 	public function storeTransactionID($paylike_id_transaction, $order_id, $total)

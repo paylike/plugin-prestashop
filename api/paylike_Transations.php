@@ -15,6 +15,11 @@ class PaylikeTransactions extends PaylikeSubsystem
 		return $this->request('GET', '/transactions/'.$id_transaction);
 	}
 
+	public function voids($id_transaction, $opts)
+	{
+		return $this->request('POST', '/transactions/'.$id_transaction.'/voids', $opts);
+	}
+
 	public function capture($id_transaction, $opts)
 	{
 		return $this->request('POST', '/transactions/'.$id_transaction.'/captures', $opts);
