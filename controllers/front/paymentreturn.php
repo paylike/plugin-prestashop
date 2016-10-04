@@ -53,7 +53,6 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 		if (Configuration::get('PAYLIKE_CHECKOUT_MODE') == 'delayed')
 		{
 			$fetch = $paylikeapi->transactions->fetch(Tools::getValue('transactionid'));
-
 			if ($fetch->transaction->currency == $currency->iso_code && $fetch->transaction->custom->cartId == $cart->id && $fetch->transaction->amount == $amount)
 			{
 				if ($paylike->validateOrder((int)$cart->id, $status_paid, $total, $paylike->displayName, null, array(), null, false, $customer->secure_key))
