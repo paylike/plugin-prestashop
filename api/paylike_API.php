@@ -7,7 +7,7 @@
 *  @license   MIT license: https://opensource.org/licenses/MIT
 */
 
-include_once(dirname(__FILE__).'/paylike_Transations.php');
+include_once(dirname(__FILE__).'/paylike_Transactions.php');
 class PaylikeAPI
 {
 	private $key;
