@@ -173,20 +173,44 @@ class Paylike extends PaymentModule
 		/* If the "Refund" button has been clicked, check if we can perform a partial or full refund on this order */
 		if (Tools::isSubmit('SubmitPaylikeRefund') && Tools::getIsset('paylike_amount_to_refund'))
 		{
-			//$appKey = Configuration::get('PAYLIKE_SECRET_KEY');
+			$id_order = (int)Tools::getValue('id_order');
 			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
-			$payliketransaction = Db::getInstance()->getRow('SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)Tools::getValue('id_order'));
+			$payliketransaction = Db::getInstance()->getRow('SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)$id_order);
 
 			if (isset($payliketransaction))
 			{
 				$refundrequest = $paylikeapi->transactions->refund($payliketransaction['paylike_tid'], ['amount' => Tools::getValue('paylike_amount_to_refund') * 100]);
 				if ($refundrequest == true)
 				{
+					$message =
+					'Trx ID: '.$payliketransaction['paylike_tid'].'
+					Authorized Amount: '.($refundrequest->transaction->amount / 100).'
+					Captured Amount: '.($refundrequest->transaction->capturedAmount / 100).'
+					Refunded Amount: '.($refundrequest->transaction->refundedAmount / 100).'
+					Order time: '.$refundrequest->transaction->created.'
+					Currency code: '.$refundrequest->transaction->currency;
+
 					// change status to refunded
-					$order = new Order((int)Tools::getValue('id_order'));
+					$order = new Order((int)$id_order);
 					$order->setCurrentState((int)Configuration::get('PS_OS_REFUND'), $this->context->employee->id);
 
-					$this->context->controller->confirmations[] = $this->l('Refunded successfully').'. '.$this->l('Refunded').' '.Tools::getValue('paylike_amount_to_refund');
+					$id_cart = $refundrequest->transaction->custom->cartId;
+					$msg = new Message();
+					$message = strip_tags($message, '<br>');
+					if (Validate::isCleanHtml($message))
+					{
+						if (self::DEBUG_MODE)
+							PrestaShopLogger::addLog('PaymentModule::validateOrder - Message is about to be added', 1, null, 'Cart', (int)$id_cart, true);
+
+						$msg->message = $message;
+						$msg->id_cart = (int)$id_cart;
+						$msg->id_customer = (int)($order->id_customer);
+						$msg->id_order = (int)$order->id;
+						$msg->private = 1;
+						$msg->add();
+					}
+
+					$this->context->controller->confirmations[] = $this->l('Refunded successfully').'. '.$this->l('Refunded').' '.$refundrequest->transaction->currency.Tools::getValue('paylike_amount_to_refund');
 				}
 				elseif ($refundrequest == false)
 					$this->context->controller->errors[] = Tools::displayError('An error occured');
@@ -238,7 +262,30 @@ class Paylike extends PaymentModule
 				if (!$capture || $capture->error)
 					$this->context->controller->errors[] = Tools::displayError('Error capturing transaction.');
 				else
+				{
+					$message =
+					'Trx ID: '.$payliketransaction['paylike_tid'].'
+					Authorized Amount: '.($capture->transaction->amount / 100).'
+					Captured Amount: '.($capture->transaction->capturedAmount / 100).'
+					Order time: '.$capture->transaction->created.'
+					Currency code: '.$capture->transaction->currency;
+
+					$msg = new Message();
+					$message = strip_tags($message, '<br>');
+					if (Validate::isCleanHtml($message))
+					{
+						if (self::DEBUG_MODE)
+							PrestaShopLogger::addLog('PaymentModule::validateOrder - Message is about to be added', 1, null, 'Cart', (int)$cart->id, true);
+
+						$msg->message = $message;
+						$msg->id_cart = (int)$cart->id;
+						$msg->id_customer = (int)($order->id_customer);
+						$msg->id_order = (int)$order->id;
+						$msg->private = 1;
+						$msg->add();
+					}
 					$this->context->controller->confirmations[] = $this->l('Transction captured successfully.');
+				}
 
 			}
 		}
