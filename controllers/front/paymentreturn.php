@@ -12,6 +12,8 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 	public function __construct()
 	{
 		parent::__construct();
+		$this->display_column_right = false;
+		$this->display_column_left = false;
 		$this->context = Context::getContext();
 	}
 
@@ -44,27 +46,41 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 		$amount = Tools::ps_round($total, 2) * 100;
 		$status_paid = Configuration::get('PS_OS_PAYMENT');
 		$status_error = Configuration::get('PS_OS_ERROR');
+		$transactionid = Tools::getValue('transactionid');
 		$params = array(
 			'paylike_redirect' => 1,
-			'transactionid' => Tools::getValue('transactionid'),
+			'transactionid' => $transactionid,
 			'amount' => $amount
 		);
 
+		$transaction_failed = false;
 		if (Configuration::get('PAYLIKE_CHECKOUT_MODE') == 'delayed')
 		{
-			$fetch = $paylikeapi->transactions->fetch(Tools::getValue('transactionid'));
-			if ($fetch->transaction->currency == $currency->iso_code && $fetch->transaction->custom->cartId == $cart->id && $fetch->transaction->amount == $amount)
+			$fetch = $paylikeapi->transactions->fetch($transactionid);
+			if ($fetch && $fetch->transaction->currency == $currency->iso_code && $fetch->transaction->custom->cartId == $cart->id && $fetch->transaction->amount == $amount)
 			{
-				if ($paylike->validateOrder((int)$cart->id, $status_paid, $total, $paylike->displayName, null, array(), null, false, $customer->secure_key))
+				$message =
+				'Trx ID: '.$transactionid.'
+				Authorized Amount: '.($fetch->transaction->amount / 100).'
+				Captured Amount: '.($fetch->transaction->capturedAmount / 100).'
+				Order time: '.$fetch->transaction->created.'
+				Currency code: '.$fetch->transaction->currency;
+
+				if ($paylike->validateOrder((int)$cart->id, $status_paid, $total, $paylike->displayName, $message, array(), null, false, $customer->secure_key))
 				{
-					$paylike->storeTransactionID(Tools::getValue('transactionid'), $paylike->currentOrder, $total);
+					$paylike->storeTransactionID($transactionid, $paylike->currentOrder, $total);
 					Tools::redirectLink(__PS_BASE_URI__.'index.php?controller=order-confirmation&id_cart='.$cart->id.'&id_module='.$paylike->id.'&id_order='.$paylike->currentOrder.'&key='.$customer->secure_key);
 				}
+			}
+			else
+			{
+				$transaction_failed = true;
+				$paylikeapi->transactions->cancel($transactionid, ['amount' => $amount]);
 			}
 		}
 		else
 		{
-			$capture = $paylikeapi->transactions->capture(Tools::getValue('transactionid'),
+			$capture = $paylikeapi->transactions->capture($transactionid,
 				[
 				'currency' => $currency->iso_code,
 				'amount' => $amount,
@@ -72,13 +88,25 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 
 			if ($capture)
 			{
-				if ($paylike->validateOrder((int)$cart->id, $status_paid, $total, $paylike->displayName, null, array(), null, false, $customer->secure_key))
-				{
-					$paylike->storeTransactionID(Tools::getValue('transactionid'), $paylike->currentOrder, $total);
+				$message =
+				'Trx ID: '.$transactionid.'
+				Authorized Amount: '.($capture->transaction->amount / 100).'
+				Captured Amount: '.($capture->transaction->capturedAmount / 100).'
+				Order time: '.$capture->transaction->created.'
+				Currency code: '.$capture->transaction->currency;
+
+				$paylike->validateOrder((int)$cart->id, $status_paid, $total, $paylike->displayName, $message, array(), null, false, $customer->secure_key);
+				$paylike->storeTransactionID(Tools::getValue('transactionid'), $paylike->currentOrder, $total);
 					Tools::redirectLink(__PS_BASE_URI__.'index.php?controller=order-confirmation&id_cart='.$cart->id.'&id_module='.$paylike->id.'&id_order='.$paylike->currentOrder.'&key='.$customer->secure_key);
-				}
 			}
+			else
+				$transaction_failed = true;
 		}
-		Tools::redirectLink($this->context->link->getModuleLink('paylike', 'paymenterror', $params, true));
+
+		if ($transaction_failed)
+		{
+			$this->context->smarty->assign('paylike_order_error', 1);
+			return $this->setTemplate('payment_error.tpl');
+		}
 	}
 }
