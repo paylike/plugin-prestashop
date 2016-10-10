@@ -80,24 +80,46 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 		}
 		else
 		{
-			$capture = $paylikeapi->transactions->capture($transactionid,
+			if ($paylike->validateOrder((int)$cart->id, $status_paid, $total, $paylike->displayName, null, array(), null, false, $customer->secure_key))
+			{
+				$capture = $paylikeapi->transactions->capture($transactionid,
 				[
 				'currency' => $currency->iso_code,
 				'amount' => $amount,
 				]);
 
-			if ($capture)
-			{
-				$message =
-				'Trx ID: '.$transactionid.'
-				Authorized Amount: '.($capture->transaction->amount / 100).'
-				Captured Amount: '.($capture->transaction->capturedAmount / 100).'
-				Order time: '.$capture->transaction->created.'
-				Currency code: '.$capture->transaction->currency;
+				if ($capture)
+				{
+					$message =
+					'Trx ID: '.$transactionid.'
+					Authorized Amount: '.($capture->transaction->amount / 100).'
+					Captured Amount: '.($capture->transaction->capturedAmount / 100).'
+					Order time: '.$capture->transaction->created.'
+					Currency code: '.$capture->transaction->currency;
 
-				$paylike->validateOrder((int)$cart->id, $status_paid, $total, $paylike->displayName, $message, array(), null, false, $customer->secure_key);
-				$paylike->storeTransactionID(Tools::getValue('transactionid'), $paylike->currentOrder, $total);
-					Tools::redirectLink(__PS_BASE_URI__.'index.php?controller=order-confirmation&id_cart='.$cart->id.'&id_module='.$paylike->id.'&id_order='.$paylike->currentOrder.'&key='.$customer->secure_key);
+					$msg = new Message();
+					$message = strip_tags($message, '<br>');
+					if (Validate::isCleanHtml($message))
+					{
+						if (self::DEBUG_MODE)
+							PrestaShopLogger::addLog('PaymentModule::validateOrder - Message is about to be added', 1, null, 'Cart', (int)$cart->id, true);
+
+						$msg->message = $message;
+						$msg->id_cart = (int)$cart->id;
+						$msg->id_customer = (int)$cart->id_customer;
+						$msg->id_order = (int)$paylike->currentOrder;
+						$msg->private = 1;
+						$msg->add();
+					}
+
+					$paylike->storeTransactionID($transactionid, $paylike->currentOrder, $total);
+						Tools::redirectLink(__PS_BASE_URI__.'index.php?controller=order-confirmation&id_cart='.$cart->id.'&id_module='.$paylike->id.'&id_order='.$paylike->currentOrder.'&key='.$customer->secure_key);
+				}
+				else
+				{
+					$transaction_failed = true;
+					$paylikeapi->transactions->cancel($transactionid, ['amount' => $amount]);
+				}
 			}
 			else
 				$transaction_failed = true;
