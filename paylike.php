@@ -246,7 +246,7 @@ class Paylike extends PaymentModule
 		$total				= Tools::ps_round($cart->getOrderTotal(true, Cart::BOTH), 2);
 
 		$total = Tools::convertPriceFull($total, $this->context->currency, $order_currency);
-		if ($order->module == $this->name && $order_state->shipped && Configuration::get('PAYLIKE_CHECKOUT_MODE') == 'delayed')
+		if ($order->module == $this->name && Configuration::get('PAYLIKE_CHECKOUT_MODE') == 'delayed' && ($order_state->shipped || $order_state->delivery))
 		{
 			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
 			$payliketransaction = Db::getInstance()->getRow('SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)$id_order);
@@ -286,7 +286,6 @@ class Paylike extends PaymentModule
 					}
 					$this->context->controller->confirmations[] = $this->l('Transction captured successfully.');
 				}
-
 			}
 		}
 	}
