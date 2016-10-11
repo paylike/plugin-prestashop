@@ -345,8 +345,8 @@ class Paylike extends PaymentModule
 
 	public function hookOrderConfirmation($params)
 	{
-		if (!$this->active)
-			return;
+		if (!$this->active || !isset($params['objOrder']) || $params['objOrder']->module != $this->name)
+			return false;
 
 		if (isset($params['objOrder']) && Validate::isLoadedObject($params['objOrder']) && isset($params['objOrder']->valid) && isset($params['objOrder']->reference))
 		{
