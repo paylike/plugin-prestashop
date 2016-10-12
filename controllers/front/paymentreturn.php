@@ -117,6 +117,8 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 					$paylike->storeTransactionID($transactionid, $paylike->currentOrder, $total);
 						Tools::redirectLink(__PS_BASE_URI__.'index.php?controller=order-confirmation&id_cart='.$cart->id.'&id_module='.$paylike->id.'&id_order='.$paylike->currentOrder.'&key='.$customer->secure_key);
 				}
+				else
+					$transaction_failed = true;
 			}
 			else
 				$transaction_failed = true;
