@@ -177,45 +177,60 @@ class Paylike extends PaymentModule
 			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
 			$payliketransaction = Db::getInstance()->getRow('SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)$id_order);
 
-			if (isset($payliketransaction))
+			if (!Validate::isPrice(Tools::getValue('paylike_amount_to_refund')))
+				$this->context->controller->errors[] = Tools::displayError('Invalid amount to refund.');
+			else
 			{
-				$refundrequest = $paylikeapi->transactions->refund($payliketransaction['paylike_tid'], ['amount' => Tools::getValue('paylike_amount_to_refund') * 100]);
-				if ($refundrequest == true)
+				if (isset($payliketransaction))
 				{
-					$message =
-					'Trx ID: '.$payliketransaction['paylike_tid'].'
-					Authorized Amount: '.($refundrequest->transaction->amount / 100).'
-					Captured Amount: '.($refundrequest->transaction->capturedAmount / 100).'
-					Refunded Amount: '.($refundrequest->transaction->refundedAmount / 100).'
-					Order time: '.$refundrequest->transaction->created.'
-					Currency code: '.$refundrequest->transaction->currency;
+					$fetch = $paylikeapi->transactions->fetch($payliketransaction['paylike_tid']);
+					$refunded = ($fetch)? $fetch->transaction->refundedAmount / 100 : 0;
+					$captured = ($fetch)? $fetch->transaction->capturedAmount / 100 : 0;
+					$refunded = $refunded + Tools::getValue('paylike_amount_to_refund');
 
-					// change status to refunded
-					$order = new Order((int)$id_order);
-					$order->setCurrentState((int)Configuration::get('PS_OS_REFUND'), $this->context->employee->id);
-
-					$id_cart = $refundrequest->transaction->custom->cartId;
-					$msg = new Message();
-					$message = strip_tags($message, '<br>');
-					if (Validate::isCleanHtml($message))
+					if ($refunded > $captured)
+						$this->context->controller->errors[] = Tools::displayError('Refunding amount must be smaller than captured amount.');
+					else
 					{
-						if (self::DEBUG_MODE)
-							PrestaShopLogger::addLog('PaymentModule::validateOrder - Message is about to be added', 1, null, 'Cart', (int)$id_cart, true);
+						$refundrequest = $paylikeapi->transactions->refund($payliketransaction['paylike_tid'], ['amount' => Tools::getValue('paylike_amount_to_refund') * 100]);
+						if ($refundrequest == true)
+						{
+							$message =
+							'Trx ID: '.$payliketransaction['paylike_tid'].'
+							Authorized Amount: '.($refundrequest->transaction->amount / 100).'
+							Captured Amount: '.($refundrequest->transaction->capturedAmount / 100).'
+							Refunded Amount: '.($refundrequest->transaction->refundedAmount / 100).'
+							Order time: '.$refundrequest->transaction->created.'
+							Currency code: '.$refundrequest->transaction->currency;
 
-						$msg->message = $message;
-						$msg->id_cart = (int)$id_cart;
-						$msg->id_customer = (int)($order->id_customer);
-						$msg->id_order = (int)$order->id;
-						$msg->private = 1;
-						$msg->add();
+							// change status to refunded
+							$order = new Order((int)$id_order);
+							$order->setCurrentState((int)Configuration::get('PS_OS_REFUND'), $this->context->employee->id);
+
+							$id_cart = $refundrequest->transaction->custom->cartId;
+							$msg = new Message();
+							$message = strip_tags($message, '<br>');
+							if (Validate::isCleanHtml($message))
+							{
+								if (self::DEBUG_MODE)
+									PrestaShopLogger::addLog('PaymentModule::validateOrder - Message is about to be added', 1, null, 'Cart', (int)$id_cart, true);
+
+								$msg->message = $message;
+								$msg->id_cart = (int)$id_cart;
+								$msg->id_customer = (int)($order->id_customer);
+								$msg->id_order = (int)$order->id;
+								$msg->private = 1;
+								$msg->add();
+							}
+
+							$this->context->controller->confirmations[] = $this->l('Refunded successfully').'. '.$this->l('Refunded Amount : ').' '.$refundrequest->transaction->currency.' '.Tools::getValue('paylike_amount_to_refund');
+						}
+						elseif ($refundrequest == false)
+							$this->context->controller->errors[] = Tools::displayError('Refund Request Failed.');
 					}
-
-					$this->context->controller->confirmations[] = $this->l('Refunded successfully').'. '.$this->l('Refunded').' '.$refundrequest->transaction->currency.Tools::getValue('paylike_amount_to_refund');
 				}
-				elseif ($refundrequest == false)
-					$this->context->controller->errors[] = Tools::displayError('An error occured');
 				else
-					$this->context->controller->errors[] = Tools::displayError($refundrequest);
+					$this->context->controller->errors[] = Tools::displayError('Invalid paylike transaction.');
 			}
 		}
 	}
