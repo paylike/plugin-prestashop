@@ -45,13 +45,7 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 		$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
 		$amount = Tools::ps_round($total, 2) * 100;
 		$status_paid = Configuration::get('PS_OS_PAYMENT');
-		$status_error = Configuration::get('PS_OS_ERROR');
 		$transactionid = Tools::getValue('transactionid');
-		$params = array(
-			'paylike_redirect' => 1,
-			'transactionid' => $transactionid,
-			'amount' => $amount
-		);
 
 		$transaction_failed = false;
 		if (Configuration::get('PAYLIKE_CHECKOUT_MODE') == 'delayed')
