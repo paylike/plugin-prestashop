@@ -1,65 +1,88 @@
 <?php
+/**
+* Team Paylike
+*
+*  @author    Team Paylike
+*  @copyright Team Paylike
+*  @license   MIT license: https://opensource.org/licenses/MIT
+*/
 
-class paylike extends PaymentModule {
+if (!defined('_PS_VERSION_'))
+	exit;
 
+include_once(_PS_MODULE_DIR_.'paylike/api/paylike_API.php');
+class Paylike extends PaymentModule
+{
 	private $_html = '';
-	private $_postErrors = array();
-
-	public function __construct(){
+	public function __construct()
+	{
 		$this->name = 'paylike';
 		$this->tab = 'payments_gateways';
-		$this->version = '1.0';
+		$this->version = '1.0.0';
 		$this->author = 'Team Paylike';
 		$this->bootstrap = true;
 
+		$this->currencies = true;
+		$this->currencies_mode = 'checkbox';
+
 		parent::__construct();
 
-		$this->displayName = 'Paylike';
+		$this->displayName = $this->l('Paylike');
 		$this->description = $this->l('Receive payment with Paylike');
 	}
 
-	public function install(){
-
-		return (parent::install() && $this->registerHook('orderConfirmation') && $this->registerHook('payment') && $this->registerHook('header') && $this->registerHook('paymentReturn')  && $this->registerHook('BackOfficeHeader') && $this->installDb());
+	public function install()
+	{
+		Configuration::updateValue('PAYLIKE_CHECKOUT_MODE', 'instant');
+		return (parent::install()
+			&& $this->registerHook('orderConfirmation')
+			&& $this->registerHook('payment')
+			&& $this->registerHook('header')
+			&& $this->registerHook('paymentReturn')
+			&& $this->registerHook('BackOfficeHeader')
+			&& $this->registerHook('displayAdminOrder')
+			&& $this->registerHook('actionOrderStatusPostUpdate')
+			&& $this->installDb());
 	}
 
-	/**
- * Paylikes's module database tables installation
- *
- * @return boolean Database tables installation result
- */
-public function installDb()
-{
-	return Db::getInstance()->Execute('
-	CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'paylike_transactions` (
-				  `id` int(11) NOT NULL AUTO_INCREMENT,
-				  `paylike_tid` varchar(255) NOT NULL,
-				  `order_id` int(11) NOT NULL,
-				  `payed_at` datetime NOT NULL,
-				  `payed_amount` int(11) NOT NULL,
-				  `refunded_amount` int(11) NOT NULL,
-				  PRIMARY KEY (`id`)
-				) ENGINE=MyISAM  DEFAULT CHARSET=latin1 AUTO_INCREMENT=13 ;'
-			) ;
-}
+	public function installDb()
+	{
+		return Db::getInstance()->Execute('CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'paylike_transactions` (
+			`id`				int(11) NOT NULL AUTO_INCREMENT,
+			`paylike_tid`		varchar(255) NOT NULL,
+			`order_id`			int(11) NOT NULL,
+			`payed_at`			datetime NOT NULL,
+			`payed_amount`		DECIMAL(20,6) NOT NULL,
+			`refunded_amount`	DECIMAL(20,6) NOT NULL,
+			PRIMARY KEY			(`id`)
+			) ENGINE=MyISAM		DEFAULT CHARSET=latin1 AUTO_INCREMENT=13 ;');
+	}
 
-	public function uninstall(){
-		return parent::uninstall() && Db::getInstance()->Execute('DROP TABLE `'._DB_PREFIX_.'paylike_transactions`')
-			&&  Configuration::deleteByName('PAYLIKE_API_KEY') && Configuration::deleteByName('PAYLIKE_APP_KEY') ;
+	public function uninstall()
+	{
+		return (parent::uninstall()
+			&& Db::getInstance()->Execute('DROP TABLE IF EXISTS `'._DB_PREFIX_.'paylike_transactions`')
+			&& Configuration::deleteByName('PAYLIKE_PUBLIC_KEY')
+			&& Configuration::deleteByName('PAYLIKE_SECRET_KEY')
+			&& Configuration::deleteByName('PAYLIKE_CHECKOUT_MODE'));
 	}
 
 	public function getContent()
 	{
-
 		if (Tools::isSubmit('submitPaylike'))
 		{
-			Configuration::updateValue('PAYLIKE_API_KEY', Tools::getvalue('PAYLIKE_API_KEY'));
-			Configuration::updateValue('PAYLIKE_APP_KEY', Tools::getvalue('PAYLIKE_APP_KEY'));
-
+			if (Tools::getvalue('PAYLIKE_PUBLIC_KEY') && Tools::getvalue('PAYLIKE_SECRET_KEY'))
+			{
+				Configuration::updateValue('PAYLIKE_PUBLIC_KEY', Tools::getvalue('PAYLIKE_PUBLIC_KEY'));
+				Configuration::updateValue('PAYLIKE_SECRET_KEY', Tools::getvalue('PAYLIKE_SECRET_KEY'));
+				Configuration::updateValue('PAYLIKE_CHECKOUT_MODE', Tools::getValue('PAYLIKE_CHECKOUT_MODE', 'instant'));
+				$this->context->controller->confirmations[] = $this->l('Settings saved successfully');
+			}
+			else
+				$this->context->controller->errors[] = $this->l('Public key and Secret key cannot be empty.');
 		}
-			$this->_html = $this->renderForm();
-
-			return $this->_html;
+		$this->_html = $this->renderForm();
+		return $this->_html;
 	}
 
 	public function renderForm()
@@ -73,13 +96,32 @@ public function installDb()
 				'input' => array(
 					array(
 						'type' => 'text',
-						'label' => $this->l('Public API Key'),
-						'name' => 'PAYLIKE_API_KEY'
+						'label' => $this->l('Public Key'),
+						'name' => 'PAYLIKE_PUBLIC_KEY'
 					),
 					array(
 						'type' => 'text',
-						'label' => $this->l('APP Key'),
-						'name' => 'PAYLIKE_APP_KEY'
+						'label' => $this->l('Secret Key'),
+						'name' => 'PAYLIKE_SECRET_KEY'
+					),
+					array(
+						'type' => 'radio',
+						'label' => $this->l('Capture Mode'),
+						'name' => 'PAYLIKE_CHECKOUT_MODE',
+						'values' => array(
+						array(
+							'id' => 'PAYLIKE_CHECKOUT_MODE_on',
+							'value' => 'instant',
+							'label' => $this->l('Instant Capture'),
+						),
+						array(
+							'id' => 'PAYLIKE_CHECKOUT_MODE_off',
+							'value' => 'delayed',
+							'label' => $this->l('Delayed Capture')
+							)
+						),
+
+						'desc' => $this->l('Instant capture: Amount is captured as soon as the order is confirmed by customer.').'<br>'.$this->l('Delayed capture: Amount is captured after order status is changed to shipped.')
 					)
 				),
 				'submit' => array(
@@ -109,225 +151,235 @@ public function installDb()
 		return $helper->generateForm(array($fields_form));
 	}
 
-public function getConfigFieldsValues()
-{
-	return array(
-		'PAYLIKE_API_KEY' => Tools::getValue('PAYLIKE_API_KEY', Configuration::get('PAYLIKE_API_KEY')),
-		'PAYLIKE_APP_KEY' => Tools::getValue('PAYLIKE_APP_KEY', Configuration::get('PAYLIKE_APP_KEY'))
-	);
-}
-
-
-public function hookBackOfficeHeader()
-{
-
-	/* Continue only if we are on the order's details page (Back-office) */
-	if (!Tools::getIsset('vieworder') || !Tools::getIsset('id_order'))
-		return;
-
-	/* If the "Refund" button has been clicked, check if we can perform a partial or full refund on this order */
-	if (Tools::isSubmit('SubmitPaylikeRefund') && Tools::getIsset('paylike_amount_to_refund'))
+	public function getConfigFieldsValues()
 	{
-		$appKey = Configuration::get("PAYLIKE_APP_KEY");
-		$paylikeapi = new PaylikeAPI(Configuration::get("PAYLIKE_APP_KEY"));
-
-		$query = 'SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)Tools::getValue('id_order');
-		$payliketransaction = Db::getInstance()->getRow($query);
-
-
-		$refundrequest = $paylikeapi->transactions->refund($payliketransaction['paylike_tid'],['amount' => Tools::getValue('paylike_amount_to_refund') * 100]);
-		if($refundrequest == TRUE)
-			$msg = '<div class=\"alert alert-success\">Refunded successfully. Refunded '.(Tools::getValue('paylike_amount_to_refund')).'</div>';
-		elseif($refundrequest == FALSE)
-			$msg = '<div class=\"alert alert-danger\">An error occured</div>';
-		else
-			$msg = '<div class=\"alert alert-danger\">'.$refundrequest.'</div>';
-
-
-			$output = '
-		<script type="text/javascript">
-			$(document).ready(function() {
-				var appendEl;
-				appendEl =  $(\'select[name=id_order_state]\').parents(\'form\').after($(\'<div/>\'));
-				$("'.$msg.'").appendTo(appendEl)
-			});
-			</script>';
-
-		return $output;
-}
-
-	/* Check if the order was paid with Paylike and display the transaction details */
-	if (Db::getInstance()->getValue('SELECT module FROM '._DB_PREFIX_.'orders WHERE id_order = '.(int)Tools::getValue('id_order')) == $this->name)
-	{
-
-		$order = new Order((int)Tools::getValue('id_order'));
-
-		$currency = $this->context->currency;
-		$c_char = $currency->sign;
-		$output = '
-		<script type="text/javascript">
-			$(document).ready(function() {
-				var appendEl;
-				if ($(\'select[name=id_order_state]\').is(":visible")) {
-					appendEl = $(\'select[name=id_order_state]\').parents(\'form\').after($(\'<div/>\'));
-				} else {
-					appendEl = $("#status");
-				}
-				$(\'<form method="post" ><fieldset'.(_PS_VERSION_ < 1.5 ? ' style="width: 400px;"' : '').'><legend><img src="../img/admin/money.gif" alt="" />'.$this->l('Paylike Payment Refund').'</legend>';
-
-			$output .= '<input name="paylike_amount_to_refund" placeholder="Amount to refund" type="text"/><input name="SubmitPaylikeRefund" type="submit" class="btn btn-primary" value="'.$this->l('Process Refund').'"/></fieldset></form><br />\').appendTo(appendEl);
-			});
-		</script>';
-
-		return $output;
+		return array('PAYLIKE_PUBLIC_KEY' => Tools::getValue('PAYLIKE_PUBLIC_KEY', Configuration::get('PAYLIKE_PUBLIC_KEY')),
+			'PAYLIKE_SECRET_KEY' => Tools::getValue('PAYLIKE_SECRET_KEY', Configuration::get('PAYLIKE_SECRET_KEY')),
+			'PAYLIKE_CHECKOUT_MODE' => Tools::getValue('PAYLIKE_CHECKOUT_MODE', Configuration::get('PAYLIKE_CHECKOUT_MODE')));
 	}
-}
 
-	/**
-	* hookPayment($params)
-	* Called in Front Office at Payment Screen - displays user this module as payment option
-	*/
-public function hookPayment($params){
+	public function hookHeader()
+	{
+		$this->context->controller->addCss($this->_path.'views/css/paylike.css');
+		$this->context->controller->addJs('https://sdk.paylike.io/3.js');
+	}
 
+	public function hookBackOfficeHeader()
+	{
+		/* Continue only if we are on the order's details page (Back-office) */
+		if (!Tools::getIsset('vieworder') || !Tools::getIsset('id_order'))
+			return;
+
+		/* If the "Refund" button has been clicked, check if we can perform a partial or full refund on this order */
+		if (Tools::isSubmit('SubmitPaylikeRefund') && Tools::getIsset('paylike_amount_to_refund'))
+		{
+			$id_order = (int)Tools::getValue('id_order');
+			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
+			$payliketransaction = Db::getInstance()->getRow('SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)$id_order);
+
+			if (!Validate::isPrice(Tools::getValue('paylike_amount_to_refund')))
+				$this->context->controller->errors[] = Tools::displayError('Invalid amount to refund.');
+			else
+			{
+				if (isset($payliketransaction))
+				{
+					$fetch = $paylikeapi->transactions->fetch($payliketransaction['paylike_tid']);
+					$refunded = ($fetch)? $fetch->transaction->refundedAmount / 100 : 0;
+					$captured = ($fetch)? $fetch->transaction->capturedAmount / 100 : 0;
+					$refunded = $refunded + Tools::getValue('paylike_amount_to_refund');
+
+					if ($refunded > $captured)
+						$this->context->controller->errors[] = Tools::displayError('Refunding amount must be smaller than captured amount.');
+					else
+					{
+						$refundrequest = $paylikeapi->transactions->refund($payliketransaction['paylike_tid'], ['amount' => Tools::getValue('paylike_amount_to_refund') * 100]);
+						if ($refundrequest == true)
+						{
+							$message =
+							'Trx ID: '.$payliketransaction['paylike_tid'].'
+							Authorized Amount: '.($refundrequest->transaction->amount / 100).'
+							Captured Amount: '.($refundrequest->transaction->capturedAmount / 100).'
+							Refunded Amount: '.($refundrequest->transaction->refundedAmount / 100).'
+							Order time: '.$refundrequest->transaction->created.'
+							Currency code: '.$refundrequest->transaction->currency;
+
+							// change status to refunded
+							$order = new Order((int)$id_order);
+							$order->setCurrentState((int)Configuration::get('PS_OS_REFUND'), $this->context->employee->id);
+
+							$id_cart = $refundrequest->transaction->custom->cartId;
+							$msg = new Message();
+							$message = strip_tags($message, '<br>');
+							if (Validate::isCleanHtml($message))
+							{
+								if (self::DEBUG_MODE)
+									PrestaShopLogger::addLog('PaymentModule::validateOrder - Message is about to be added', 1, null, 'Cart', (int)$id_cart, true);
+
+								$msg->message = $message;
+								$msg->id_cart = (int)$id_cart;
+								$msg->id_customer = (int)($order->id_customer);
+								$msg->id_order = (int)$order->id;
+								$msg->private = 1;
+								$msg->add();
+							}
+
+							$this->context->controller->confirmations[] = $this->l('Refunded successfully').'. '.$this->l('Refunded Amount : ').' '.$refundrequest->transaction->currency.' '.Tools::getValue('paylike_amount_to_refund');
+						}
+						elseif ($refundrequest == false)
+							$this->context->controller->errors[] = Tools::displayError('Refund Request Failed.');
+					}
+				}
+				else
+					$this->context->controller->errors[] = Tools::displayError('Invalid paylike transaction.');
+			}
+		}
+	}
+
+	public function hookDisplayAdminOrder($params)
+	{
+		$id_order = $params['id_order'];
+		$order = new Order((int)$id_order);
+		if ($order->module == $this->name)
+		{
+			$order_token = Tools::getAdminToken('AdminOrders'.(int)Tab::getIdFromClassName('AdminOrders').(int)$this->context->employee->id);
+			$this->context->smarty->assign(array(
+				'ps_version' => _PS_VERSION_,
+				'id_order' => $id_order,
+				'order_token' => $order_token
+			));
+			return $this->display(__FILE__, 'views/templates/hook/admin_order.tpl');
+		}
+	}
+
+	public function hookActionOrderStatusPostUpdate($params)
+	{
+		$id_order			= (int)$params['id_order'];
+		$cart				= $params['cart'];
+		$order				= new Order((int)$id_order);
+		$order_state		= new OrderState(Tools::getValue('id_order_state'));
+		$order_currency 	= new Currency((int)$cart->id_currency);
+		$total				= Tools::ps_round($cart->getOrderTotal(true, Cart::BOTH), 2);
+
+		$total = Tools::convertPriceFull($total, $this->context->currency, $order_currency);
+		if ($order->module == $this->name && Configuration::get('PAYLIKE_CHECKOUT_MODE') == 'delayed' && ($order_state->shipped || $order_state->delivery))
+		{
+			$paylikeapi = new PaylikeAPI(Configuration::get('PAYLIKE_SECRET_KEY'));
+			$payliketransaction = Db::getInstance()->getRow('SELECT * FROM '._DB_PREFIX_.'paylike_transactions WHERE order_id = '.(int)$id_order);
+
+			if (isset($payliketransaction))
+			{
+				$capture = $paylikeapi->transactions->capture($payliketransaction['paylike_tid'],
+					[
+					'currency' => $order_currency->iso_code,
+					'amount' => $total * 100,
+					]);
+
+				if (!$capture || $capture->error)
+					$this->context->controller->errors[] = Tools::displayError('Error capturing transaction.');
+				else
+				{
+					$message =
+					'Trx ID: '.$payliketransaction['paylike_tid'].'
+					Authorized Amount: '.($capture->transaction->amount / 100).'
+					Captured Amount: '.($capture->transaction->capturedAmount / 100).'
+					Order time: '.$capture->transaction->created.'
+					Currency code: '.$capture->transaction->currency;
+
+					$msg = new Message();
+					$message = strip_tags($message, '<br>');
+					if (Validate::isCleanHtml($message))
+					{
+						if (self::DEBUG_MODE)
+							PrestaShopLogger::addLog('PaymentModule::validateOrder - Message is about to be added', 1, null, 'Cart', (int)$cart->id, true);
+
+						$msg->message = $message;
+						$msg->id_cart = (int)$cart->id;
+						$msg->id_customer = (int)($order->id_customer);
+						$msg->id_order = (int)$order->id;
+						$msg->private = 1;
+						$msg->add();
+					}
+					$this->context->controller->confirmations[] = $this->l('Transction captured successfully.');
+				}
+			}
+		}
+	}
+
+	public function hookPayment($params)
+	{
 		//ensure paylike key is set
-		if (!Configuration::get('PAYLIKE_API_KEY') || !Configuration::get('PAYLIKE_APP_KEY'))
+		if (!Configuration::get('PAYLIKE_PUBLIC_KEY') || !Configuration::get('PAYLIKE_SECRET_KEY'))
 			return false;
-
-		global $smarty,$cookie;
 
 		$products = $params['cart']->getProducts();
-
+		$customer = new Customer((int)$params['cart']->id_customer);
 		$productnames = array();
-		$paylikeproductsarray = '';
-
-		foreach ($products as $product) {
+		$paylikeproductsarray = array();
+		$customer_data = array();
+		$other_data = array();
+		$customer_data[] = array(
+			$this->l('First Name') => $customer->firstname,
+			$this->l('Last Name') => $customer->lastname,
+			$this->l('Email') => $customer->email
+			);
+		$other_data[] = array(
+			$this->l('Shop Name') => $this->context->shop->name,
+			$this->l('Prestashop version') => _PS_VERSION_,
+			$this->l('Module version') => $this->version,
+			);
+		foreach ($products as $product)
+		{
 			$productnames[] = $product['name'];
-			$paylikeproductsarray .= '{SKU:"'.$product["id_product"].'", quantity:'.$product["cart_quantity"].'},';
+			$paylikeproductsarray[] = array(
+				$this->l('Product Name') => $product['name'],
+				$this->l('SKU') => $product['id_product'],
+				$this->l('Quantity') => $product['cart_quantity']
+			);
 		}
 
-		$description = implode(',',$productnames);
+		$description = implode(',', $productnames);
+		$amount = $params['cart']->getOrderTotal() * 100;//paid amounts with 100 to handle paylike's decimals
 
-
-		$amount = $params["cart"]->getOrderTotal() * 100;//pad amounts with 100 to handle paylike's decimals
-
-
-		$currency = Db::getInstance()->getValue('
-			SELECT `iso_code`
-			FROM `'._DB_PREFIX_.'currency`
-			WHERE `id_currency` = '.$params["cart"]->id_currency);
-
-
-	return '
-	<script src="https://sdk.paylike.io/2.js"></script>
-	<script>
-
-			var paylike = Paylike("'.Configuration::get("PAYLIKE_API_KEY").'");
-
-			function pay(){
-				paylike.popup({
-					title: "'.$this->context->shop->name.'",
-					description: "'.$description.'",
-					currency: "'.$currency.'",
-					amount: '.$amount.',
-					descriptor: "Payment to '.$this->context->shop->name.'",
-
-						custom: {
-							products: [
-								'.$paylikeproductsarray.'
-							],
-						},
-
-				}, function( err , r){
-					if (err)
-					{
-						return console.warn(err);
-					}
-
-					location.href = "'.(Configuration::get("PS_SSL_ENABLED") ? "https" : "http").'://'.$_SERVER['HTTP_HOST'].__PS_BASE_URI__.'modules/paylike/paymentReturn.php?transactionid="+r.transaction.id;
-				});
-			}
-		</script>'.$this->display(__FILE__, 'payment.tpl');
+		$currency = new Currency((int)$params['cart']->id_currency);
+		$this->context->smarty->assign(array(
+			'PAYLIKE_PUBLIC_KEY'	=> Configuration::get('PAYLIKE_PUBLIC_KEY'),
+			'PS_SSL_ENABLED'		=> (Configuration::get('PS_SSL_ENABLED') ? 'https' : 'http'),
+			'id_cart'				=> Tools::jsonEncode($params['cart']->id),
+			'customer_data'			=> Tools::jsonEncode($customer_data),
+			'other_data'			=> Tools::jsonEncode($other_data),
+			'paylikeproductsarray'	=> Tools::jsonEncode($paylikeproductsarray),
+			'http_host'				=> Tools::getHttpHost(),
+			'shop_name'				=> $this->context->shop->name,
+			'iso_code'				=> $currency->iso_code,
+			'amount'				=> $amount,
+			'description'			=> $description,
+			'base_uri'				=> __PS_BASE_URI__,
+		));
+		return $this->display(__FILE__, 'views/templates/hook/payment.tpl');
 	}
 
-/**
- * Display a confirmation message after an order has been placed
- *
- * @param array Hook parameters
- */
-public function hookPaymentReturn($params)
-{
-	return $this->display(__FILE__, 'order-confirmation.tpl');
-}
-
-public function storeTransactionID($payliketransactionid,$order_id,$total)
-{
-	return Db::getInstance()->Execute('
-			INSERT INTO '._DB_PREFIX_.'paylike_transactions (id, paylike_tid, order_id, payed_amount, payed_at)
-			VALUES ("", "'.$payliketransactionid.'", "'.$order_id.'", "'.$total.'" , NOW())');
-}
-
-
-}
-
-//Paylike API
-class PaylikeAPI {
-	private $key;
-	// subsystems
-	private $transactions;
-	public function __construct( $key ){
-		$this->key = $key;
-	}
-	public function setKey( $key ){
-		$this->key = $key;
-	}
-	public function getKey(){
-		return $this->key;
-	}
-	public function __get( $name ){
-		switch ($name) {
-			case 'transactions':
-				if (!$this->transactions)
-					$this->transactions = new PaylikeTransactions($this);
-				return $this->transactions;
-			default:
-				throw new BadPropertyException($this, $name);
-		}
-    }
-}
-
-class PaylikeTransactions extends PaylikeSubsystem {
-	public function fetch( $transactionId ){
-		return $this->request('GET', '/transactions/'.$transactionId);
-	}
-	public function capture( $transactionId, $opts ){
-		return $this->request('POST', '/transactions/'.$transactionId.'/captures', $opts);
-	}
-	public function refund( $transactionId, $opts ){
-		return $this->request('POST', '/transactions/'.$transactionId.'/refunds', $opts);
-	}
-}
-
-class PaylikeSubsystem {
-	private $paylike;
-	public function __construct( $paylike ){
-		$this->paylike = $paylike;
-	}
-	protected function request( $verb, $path, $data = null ){
-		$c = curl_init();
-		curl_setopt($c, CURLOPT_URL, 'https://api.paylike.io'.$path);
-		if ($this->paylike->getKey() !== null)
-			curl_setopt($c, CURLOPT_USERPWD, ':'.$this->paylike->getKey());
-		if (in_array($verb, [ 'POST', 'PUT', 'PATCH' ]))
-			curl_setopt($c, CURLOPT_POSTFIELDS, $data);
-		if (in_array($verb, [ 'GET', 'POST' ]))
-			curl_setopt($c, CURLOPT_RETURNTRANSFER, true);
-		$raw = curl_exec($c);
-		$code = curl_getinfo($c, CURLINFO_HTTP_CODE);
-		curl_close($c);
-		if ($code < 200 || $code > 299)
+	public function hookOrderConfirmation($params)
+	{
+		if (!$this->active || !isset($params['objOrder']) || $params['objOrder']->module != $this->name)
 			return false;
-		if ($code === 204)	// No Content
-			return true;
-		return json_decode($raw);
+
+		if (isset($params['objOrder']) && Validate::isLoadedObject($params['objOrder']) && isset($params['objOrder']->valid) && isset($params['objOrder']->reference))
+		{
+			$this->smarty->assign(
+				'paylike_order', array(
+					'id' => $params['objOrder']->id,
+					'reference' => $params['objOrder']->reference,
+					'valid' => $params['objOrder']->valid
+					)
+				);
+
+			return $this->display(__FILE__, 'views/templates/hook/order-confirmation.tpl');
+		}
+	}
+
+	public function storeTransactionID($paylike_id_transaction, $order_id, $total)
+	{
+		return Db::getInstance()->Execute('INSERT INTO '._DB_PREFIX_.'paylike_transactions (`paylike_tid`, `order_id`, `payed_amount`, `payed_at`)
+			VALUES ("'.pSQL($paylike_id_transaction).'", "'.pSQL($order_id).'", "'.pSQL($total).'" , NOW())');
 	}
 }
