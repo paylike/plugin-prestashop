@@ -97,9 +97,6 @@ class PaylikePaymentReturnModuleFrontController extends ModuleFrontController
 					$message = strip_tags($message, '<br>');
 					if (Validate::isCleanHtml($message))
 					{
-						if (self::DEBUG_MODE)
-							PrestaShopLogger::addLog('PaymentModule::validateOrder - Message is about to be added', 1, null, 'Cart', (int)$cart->id, true);
-
 						$msg->message = $message;
 						$msg->id_cart = (int)$cart->id;
 						$msg->id_customer = (int)$cart->id_customer;
