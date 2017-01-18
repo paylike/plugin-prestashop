@@ -20,7 +20,8 @@ var BASE_URI 			= "{$base_uri|escape:'htmlall':'UTF-8'}";
 var iso_code 			= "{$iso_code|escape:'htmlall':'UTF-8'}";
 var amount 				= "{$amount|escape:'htmlall':'UTF-8'}";
 var description 		= "{$description|escape:'htmlall':'UTF-8'}";
-var url_controller 		= "{$link->getModuleLink('paylike', 'paymentreturn')|escape:'htmlall':'UTF-8'}";
+var url_controller 		= "{$redirect_url|escape:'htmlall':'UTF-8'}";
+var qry_str				= "{$qry_str}";
 
 function pay()
 {
@@ -41,8 +42,7 @@ function pay()
 	{
 		if (typeof r !== 'undefined')
 		{
-			//var return_url = PS_SSL_ENABLED + '://'+ host + BASE_URI + 'modules/paylike/paymentReturn.php?transactionid=' + r.transaction.id;
-			var return_url = url_controller + '&transactionid=' + r.transaction.id;
+			var return_url = url_controller + qry_str + 'transactionid=' + r.transaction.id;
 			if (err)
 			{
 				return console.warn(err);

@@ -341,6 +341,9 @@ class Paylike extends PaymentModule
 		$amount = $params['cart']->getOrderTotal() * 100;//paid amounts with 100 to handle paylike's decimals
 
 		$currency = new Currency((int)$params['cart']->id_currency);
+		$redirect_url = $this->context->link->getModuleLink('paylike', 'paymentreturn', [], true, (int)$this->context->language->id);
+		if (Configuration::get('PS_REWRITING_SETTINGS') == 1)
+			$redirect_url = Tools::strReplaceFirst('&', '?', $redirect_url);
 		$this->context->smarty->assign(array(
 			'PAYLIKE_PUBLIC_KEY'	=> Configuration::get('PAYLIKE_PUBLIC_KEY'),
 			'PS_SSL_ENABLED'		=> (Configuration::get('PS_SSL_ENABLED') ? 'https' : 'http'),
@@ -352,6 +355,7 @@ class Paylike extends PaymentModule
 			'shop_name'				=> $this->context->shop->name,
 			'iso_code'				=> $currency->iso_code,
 			'amount'				=> $amount,
+			'qry_str'				=> (Configuration::get('PS_REWRITING_SETTINGS')? '?' : '&'),
 			'description'			=> $description,
 			'base_uri'				=> __PS_BASE_URI__,
 		));
