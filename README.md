@@ -1,6 +1,6 @@
 # [DEPRECATED] PrestaShop plugin for Paylike
 
-This plugin is no longer maintained. See our Magento plugins for:
+This plugin is no longer maintained. See our Prestashop plugins for:
 
 - [1.7.*](https://github.com/paylike/plugin-prestashop-1.7)
 - [1.6.*](https://github.com/paylike/plugin-prestashop-1.6)
